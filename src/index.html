@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="zh-Hant" translate="no">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#131218">
+<meta name="color-scheme" content="dark">
+<meta name="google" content="notranslate">
+<title>lyrics-viewer</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23131218'/%3E%3Crect x='13' y='4' width='6' height='17' rx='3' fill='%23FE4B74'/%3E%3Crect x='14.25' y='21' width='3.5' height='7' rx='1.5' fill='%23FF9CB4'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<!-- 字型 CSS 不擋首次繪製：先以 print 載入，載完再套用；離線時直接用系統字 -->
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Huninn&amp;family=Zen+Maru+Gothic:wght@500;700;900&amp;family=Zen+Old+Mincho:wght@700;900&amp;display=swap" media="print" onload="this.media='all'">
+<noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Huninn&amp;family=Zen+Maru+Gothic:wght@500;700;900&amp;family=Zen+Old+Mincho:wght@700;900&amp;display=swap"></noscript>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="app" id="app">
+  <div class="hall" id="hall">
+    <main class="scroller" id="scroller" data-i18n-aria="lyrics">
+      <div class="column" id="column"></div>
+    </main>
+    <div class="fade fade--top" id="fade-top" aria-hidden="true"></div>
+    <div class="topband" id="topband" aria-hidden="true"></div>
+    <div class="fade fade--bottom" aria-hidden="true"></div>
+
+    <header class="topbar">
+      <button class="cover-btn press" id="cover-btn" type="button" data-i18n-label="openLibrary" aria-haspopup="dialog" aria-controls="sheet">
+        <span class="cover-thumb" id="cover-thumb"></span>
+      </button>
+      <p class="mini-title" id="mini-title" lang="ja" aria-hidden="true"></p>
+    </header>
+
+    <button class="recenter press" id="recenter" type="button" data-i18n-label="recenter" hidden><i data-icon="recenter"></i></button>
+  </div>
+
+  <footer class="dock" id="dock">
+    <div class="seek" id="seek">
+      <span class="time time--now" id="time-now">
+        <span class="mode-tag" id="mode-tag" role="img" data-i18n-label="clockMode" data-tip-tap><i data-icon="clockMode"></i></span>
+        <span class="time-val" id="time-now-val">0:00</span>
+      </span>
+      <div class="seekbar" id="seekbar" role="slider" tabindex="0" data-i18n-aria="seek" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0">
+        <div class="seek-rail">
+          <div class="seek-track">
+            <div class="seek-buffer" id="seek-buffer"></div>
+            <div class="seek-fill" id="seek-fill"></div>
+          </div>
+          <div class="seek-ticks" id="seek-ticks" aria-hidden="true"></div>
+          <div class="seek-thumb" id="seek-thumb" aria-hidden="true"></div>
+        </div>
+        <div class="seek-bubble" id="seek-bubble" aria-hidden="true">
+          <span class="bubble-time" id="bubble-time">0:00</span>
+          <span class="bubble-lyric" id="bubble-lyric" lang="ja"></span>
+        </div>
+      </div>
+      <span class="time time--end" id="time-end">0:00</span>
+    </div>
+
+    <div class="transport">
+      <button class="ctl ctl--side press" id="btn-lib" type="button" data-i18n-label="openLibrary" aria-haspopup="dialog" aria-controls="sheet"><i data-icon="library"></i></button>
+      <button class="ctl ctl--skip press" id="btn-prev" type="button" data-i18n-label="prev"><i data-icon="prev"></i></button>
+      <button class="ctl ctl--play press" id="btn-play" type="button" data-i18n-label="play">
+        <svg class="play-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+          <path class="pp pp--a" d="M8 5 L13.5 8.5 L13.5 15.5 L8 19 Z"/>
+          <path class="pp pp--b" d="M13.5 8.5 L19 12 L19 12 L13.5 15.5 Z"/>
+        </svg>
+      </button>
+      <button class="ctl ctl--skip press" id="btn-next" type="button" data-i18n-label="next"><i data-icon="next"></i></button>
+      <button class="ctl ctl--side ctl--call press" id="btn-call" type="button" aria-pressed="true" data-i18n-label="calls"><i data-icon="penlight"></i></button>
+    </div>
+  </footer>
+</div>
+
+<dialog class="sheet" id="sheet" aria-labelledby="sheet-title">
+  <div class="sheet-panel" id="sheet-panel" tabindex="-1">
+    <div class="sheet-grab" id="sheet-grab">
+      <div class="sheet-grip" aria-hidden="true"></div>
+      <div class="sheet-head">
+        <h2 class="sr-only" id="sheet-title" data-i18n="library">歌曲庫</h2>
+        <nav class="album-jump" id="album-jump" data-i18n-aria="jumpAlbum" hidden></nav>
+        <button class="icon-btn press" id="sheet-edit" type="button" aria-pressed="false" data-i18n-label="editLibrary"><i data-icon="edit"></i></button>
+        <button class="icon-btn press" id="btn-add" type="button" data-add data-i18n-label="addFiles"><i data-icon="addFiles"></i></button>
+        <button class="icon-btn press" id="sheet-close" type="button" data-i18n-label="closeLibrary"><i data-icon="close"></i></button>
+      </div>
+    </div>
+    <div class="sheet-list" id="sheet-list"></div>
+    <div class="sheet-foot">
+      <div class="setting" role="group" data-i18n-aria="fontSize">
+        <button class="step-btn press" id="size-down" type="button" data-i18n-label="fontSmaller"><i data-icon="textSmaller"></i></button>
+        <output class="step-val" id="size-val" aria-live="polite">100%</output>
+        <button class="step-btn press" id="size-up" type="button" data-i18n-label="fontLarger"><i data-icon="textLarger"></i></button>
+      </div>
+      <button class="setting wake-btn press" id="wake-switch" type="button" role="switch" aria-checked="true" data-i18n-label="wake">
+        <i data-icon="wake"></i>
+        <span class="switch" aria-hidden="true"><span class="switch-knob"></span></span>
+      </button>
+      <div class="setting lang-group" id="lang-group" role="group" data-i18n-aria="language">
+        <span class="setting-icon" role="img" data-i18n-label="language" data-tip-tap><i data-icon="language"></i></span>
+        <button class="lang-btn press" type="button" data-lang="zh" lang="zh-Hant" aria-pressed="false">中文</button>
+        <button class="lang-btn press" type="button" data-lang="en" lang="en" aria-pressed="false">English</button>
+        <button class="lang-btn press" type="button" data-lang="ja" lang="ja" aria-pressed="false">日本語</button>
+      </div>
+    </div>
+  </div>
+</dialog>
+
+<div class="toasts" id="toasts" role="status" aria-live="polite"></div>
+
+<input class="sr-only" type="file" id="file-input" multiple tabindex="-1" aria-hidden="true" accept=".md,.markdown,text/markdown,.flac,.mp3,.m4a,.aac,.ogg,.oga,.opus,.wav,audio/*">
+<input class="sr-only" type="file" id="audio-input" tabindex="-1" aria-hidden="true" accept=".flac,.mp3,.m4a,.aac,.ogg,.oga,.opus,.wav,audio/*">
+<audio id="audio" preload="metadata"></audio>
+
+<script id="lv-library" type="application/json">{"version":1,"files":[]}</script>
+<script type="module" src="app/main.js"></script>
+</body>
+</html>

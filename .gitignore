@@ -1,0 +1,16 @@
+# 個人資料（有版權，不進這個 repo）
+# library/ 是自己的歌詞庫，也是工作區：歌詞與音檔都放這裡，不進這個 repo
+.ref_data/
+library/
+*.flac
+*.mp3
+*.m4a
+*.ogg
+*.opus
+*.wav
+
+# 建置輸出
+dist/
+
+node_modules/
+*.bak

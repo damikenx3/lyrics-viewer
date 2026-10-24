@@ -1,0 +1,18 @@
+{
+  "name": "lyrics-viewer",
+  "version": "0.1.0",
+  "private": true,
+  "description": "單一 HTML 的歌詞播放器：播放音樂並同步顯示歌詞與 call",
+  "license": "GPL-3.0-or-later",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "node tools/lv.mjs build",
+    "check": "node tools/lv.mjs check",
+    "serve": "node tools/lv.mjs serve",
+    "share": "node tools/lv.mjs share",
+    "test": "node --test"
+  }
+}
