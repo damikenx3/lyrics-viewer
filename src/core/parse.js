@@ -532,7 +532,8 @@ export function parseLibraryFile(text, { path = '' } = {}) {
     flushStanza(stanza);
 
     // 拿掉隱形標記 {}，行內時間的位置跟著前移。
-    // 拿掉後沒有文字的行（例如 { 單獨一行）比照只有時間標記的行：有時間就當結束標記，不顯示。
+    // 拿掉後沒有文字的行（例如 { 單獨一行）不顯示。行首時間交給同一段的下一行（那行沒有時間的話），
+    // 否則比照只有時間標記的行當結束標記。
     const dropped = new Set();
     lyric.forEach((L, k) => {
       if (!L || !L.chars.some((c) => c.hidden)) return;
@@ -546,11 +547,21 @@ export function parseLibraryFile(text, { path = '' } = {}) {
       while (kept.length && /\s/.test(kept[kept.length - 1].ch)) kept.pop();
       for (const x of L.inline) x.idx = Math.min(shiftTo[x.idx], kept.length);
       L.chars = kept;
-      if (kept.some((c) => c.ch.trim())) return;
-      for (const ld of L.leads) markers.push(ld.start);
-      for (const x of L.inline) markers.push(x.time);
-      dropped.add(k);
+      if (!kept.some((c) => c.ch.trim())) dropped.add(k);
     });
+    for (const k of dropped) {
+      const L = lyric[k];
+      let j = k + 1;
+      while (dropped.has(j)) j++;
+      const next = j < rows.length && rows[j].kind === 'lyric' ? lyric[j] : null;
+      if (L.leads.length && next && !next.leads.length && !next.inline.length) {
+        next.leads = L.leads;
+      } else {
+        for (const ld of L.leads) markers.push(ld.start);
+        if (L.leads.some((ld) => ld.end != null)) report('warning', rows[k].n, '結束標記行不需要寫結束時間，已忽略');
+      }
+      for (const x of L.inline) markers.push(x.time);
+    }
     if (dropped.size) {
       const rs = rows.filter((_, k) => !dropped.has(k));
       const ls = lyric.filter((_, k) => !dropped.has(k));
