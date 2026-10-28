@@ -23,11 +23,14 @@ const RANGE_TYPO_RE = /[~〜–—]/;
 const LEAD_WS_RE = /^\s+/; // \s 含全形空白
 // 從 LRC 貼來的 ID 標籤行：不顯示
 const LRC_ID_RE = /^\s*\[(ti|ar|al|au|by|length|re|ve|#|offset)\s*:([^\]]*)\]\s*$/i;
-// 可用反斜線跳脫的字元。規格要求 \( \（ \《 \｜；另外補上 ) ） 》 | [ ] < > # \，
+// 可用反斜線跳脫的字元。規格要求 \( \（ \《 \｜；另外補上 ) ） 》 | [ ] < > # \ { }，
 // 讓「行首就是 [00:00] 字樣」「行首是 # 」這類歌詞也寫得出來。
-const ESCAPABLE = new Set(['(', ')', '（', '）', '《', '》', '｜', '|', '[', ']', '<', '>', '#', '\\']);
+const ESCAPABLE = new Set(['(', ')', '（', '）', '《', '》', '｜', '|', '[', ']', '<', '>', '#', '\\', '{', '}']);
 const OPEN = new Set(['(', '（']);
 const CLOSE = new Set([')', '）']);
+// 隱形 call 標記：{…} 裡的文字是 call，大括號本身不顯示
+const HIDDEN_OPEN = new Set(['{']);
+const HIDDEN_CLOSE = new Set(['}']);
 // 振假名 base 的「漢字」：Han 文字加上 々〆ヶ（青空文庫的慣例）
 const KANJI_RE = /[\p{Script=Han}々〆ヶ]/u;
 const isMark = (x, marks) => x.kind === 'c' && !x.esc && marks.includes(x.ch);
@@ -204,6 +207,13 @@ export function parseLibraryFile(text, { path = '' } = {}) {
     const v = Number(front.offset);
     if (Number.isFinite(v)) meta.offset = v;
     else report('warning', frontLine.get('offset'), `offset 不是數字：${front.offset}（已忽略）`);
+  }
+  // call: hidden → 只有 {} 是 call，() 當一般文字
+  let hiddenOnly = false;
+  if (front.call != null && front.call !== '') {
+    const v = front.call.toLowerCase();
+    if (v === 'hidden') hiddenOnly = true;
+    else if (v !== 'visible') report('warning', frontLine.get('call'), `call 只能是 visible 或 hidden：${front.call}（已忽略）`);
   }
 
   // ---- 逐行切 token（處理跨行 HTML 註解；註解只是備註，內容不使用）
@@ -472,27 +482,33 @@ export function parseLibraryFile(text, { path = '' } = {}) {
 
     // 括號配對：可跨行（範例資料有三行長的 call），但不跨段落（空行）。
     // 沒關的括號當一般文字顯示並提出警告。
+    // () 和 {} 各自配對；配成對的 {} 標上 hidden，之後拿掉不顯示。
     const flushStanza = (stanza) => {
       const seq = [];
       for (const k of stanza) for (const c of lyric[k].chars) seq.push({ c, k });
-      const stack = [];
       const diff = new Array(seq.length + 1).fill(0);
-      seq.forEach(({ c }, idx) => {
-        if (c.esc) return;
-        if (OPEN.has(c.ch)) stack.push(idx);
-        else if (CLOSE.has(c.ch)) {
-          if (!stack.length) {
-            report('warning', rows[seq[idx].k].n, `多餘的「${c.ch}」，前面沒有對應的開括號，當一般文字顯示`);
-            return;
+      const match = (opens, closes, hidden) => {
+        const stack = [];
+        seq.forEach(({ c }, idx) => {
+          if (c.esc) return;
+          if (opens.has(c.ch)) stack.push(idx);
+          else if (closes.has(c.ch)) {
+            if (!stack.length) {
+              report('warning', rows[seq[idx].k].n, `多餘的「${c.ch}」，前面沒有對應的開括號，當一般文字顯示`);
+              return;
+            }
+            const o = stack.pop();
+            diff[o] += 1;
+            diff[idx + 1] -= 1;
+            if (hidden) seq[o].c.hidden = c.hidden = true;
           }
-          const o = stack.pop();
-          diff[o] += 1;
-          diff[idx + 1] -= 1;
+        });
+        for (const o of stack) {
+          report('warning', rows[seq[o].k].n, `括號「${seq[o].c.ch}」在這段裡沒有關閉，當一般文字顯示（括號本身是歌詞的話請寫成 \\${seq[o].c.ch}）`);
         }
-      });
-      for (const o of stack) {
-        report('warning', rows[seq[o].k].n, `括號「${seq[o].c.ch}」在這段裡沒有關閉，當一般文字顯示（括號本身是歌詞的話請寫成 \\${seq[o].c.ch}）`);
-      }
+      };
+      if (!hiddenOnly) match(OPEN, CLOSE, false);
+      match(HIDDEN_OPEN, HIDDEN_CLOSE, true);
       let depth = 0;
       seq.forEach(({ c }, idx) => {
         depth += diff[idx];
@@ -514,6 +530,46 @@ export function parseLibraryFile(text, { path = '' } = {}) {
       } else stanza.push(k);
     });
     flushStanza(stanza);
+
+    // 拿掉隱形標記 {}，行內時間的位置跟著前移。
+    // 拿掉後沒有文字的行（例如 { 單獨一行）不顯示。行首時間交給同一段的下一行（那行沒有時間的話），
+    // 否則比照只有時間標記的行當結束標記。
+    const dropped = new Set();
+    lyric.forEach((L, k) => {
+      if (!L || !L.chars.some((c) => c.hidden)) return;
+      const shiftTo = [];
+      const kept = [];
+      for (const c of L.chars) {
+        shiftTo.push(kept.length);
+        if (!c.hidden) kept.push(c);
+      }
+      shiftTo.push(kept.length);
+      while (kept.length && /\s/.test(kept[kept.length - 1].ch)) kept.pop();
+      for (const x of L.inline) x.idx = Math.min(shiftTo[x.idx], kept.length);
+      L.chars = kept;
+      if (!kept.some((c) => c.ch.trim())) dropped.add(k);
+    });
+    for (const k of dropped) {
+      const L = lyric[k];
+      let j = k + 1;
+      while (dropped.has(j)) j++;
+      const next = j < rows.length && rows[j].kind === 'lyric' ? lyric[j] : null;
+      if (L.leads.length && next && !next.leads.length && !next.inline.length) {
+        next.leads = L.leads;
+      } else {
+        for (const ld of L.leads) markers.push(ld.start);
+        if (L.leads.some((ld) => ld.end != null)) report('warning', rows[k].n, '結束標記行不需要寫結束時間，已忽略');
+      }
+      for (const x of L.inline) markers.push(x.time);
+    }
+    if (dropped.size) {
+      const rs = rows.filter((_, k) => !dropped.has(k));
+      const ls = lyric.filter((_, k) => !dropped.has(k));
+      while (rs.length && rs[0].kind === 'blank') rs.shift(), ls.shift();
+      while (rs.length && rs[rs.length - 1].kind === 'blank') rs.pop(), ls.pop();
+      rows.splice(0, rows.length, ...rs);
+      lyric.splice(0, lyric.length, ...ls);
+    }
 
     // 組 Line 與時間
     const lines = [];

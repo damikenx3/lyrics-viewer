@@ -155,6 +155,107 @@ call です)
   assert.deepEqual(L[4].segments, [{ text: '(とじない', call: false, at: null, ruby: null }]);
 });
 
+test('隱形 call {}：不顯示大括號、可跨行、可和 () 混用、跳脫', () => {
+  const s = parse(`# 歌
+はい{ハイ！}と{(よい)} \\{ちがう\\}
+{ながい
+call です}
+ふつう
+`).songs[0];
+  const L = lyricLines(s);
+  assert.deepEqual(L[0].segments, [
+    { text: 'はい', call: false, at: null, ruby: null },
+    { text: 'ハイ！', call: true, at: null, ruby: null },
+    { text: 'と', call: false, at: null, ruby: null },
+    { text: '(よい)', call: true, at: null, ruby: null },
+    { text: ' {ちがう}', call: false, at: null, ruby: null },
+  ]);
+  assert.deepEqual(L[1].segments, [{ text: 'ながい', call: true, at: null, ruby: null }]);
+  assert.deepEqual(L[2].segments, [{ text: 'call です', call: true, at: null, ruby: null }]);
+  assert.deepEqual(L[3].segments, [{ text: 'ふつう', call: false, at: null, ruby: null }]);
+});
+
+test('隱形 call {}：行內時間位置、振假名、沒關的大括號照字面顯示', () => {
+  const r = parse(`# 歌
+[00:01.00] みんなで<00:02.00>{せーの！}
+[00:03.00] {夜空《よぞら》}に
+[00:05.00] {とじない
+
+[00:07.00] おわり}
+`);
+  const L = lyricLines(r.songs[0]);
+  assert.deepEqual(L[0].segments, [
+    { text: 'みんなで', call: false, at: null, ruby: null },
+    { text: 'せーの！', call: true, at: 2, ruby: null },
+  ]);
+  assert.deepEqual(L[1].segments, [
+    { text: '夜空', call: true, at: null, ruby: 'よぞら' },
+    { text: 'に', call: false, at: null, ruby: null },
+  ]);
+  assert.equal(textOf(L[2]), '{とじない');
+  assert.equal(textOf(L[3]), 'おわり}');
+  assert.deepEqual(
+    levels(r, 'warning').map((x) => x.line),
+    [4, 6],
+  );
+});
+
+test('隱形 call {}：只剩大括號的行不顯示，時間交給下一行或當結束標記', () => {
+  const r = parse(`# 歌
+[00:01.00] あ
+[00:02.00] {
+ハイ
+[00:04.00] }
+`);
+  const s = r.songs[0];
+  assert.deepEqual(
+    s.lines.map((l) => [textOf(l), l.segments.map((g) => g.call)]),
+    [
+      ['あ', [false]],
+      ['ハイ', [true]],
+    ],
+  );
+  // { 的時間交給沒有時間的「ハイ」；} 後面沒有下一行，當結束標記
+  assert.deepEqual(s.spans, [
+    { start: 1, end: 2, line: 0 },
+    { start: 2, end: 4, line: 1 },
+  ]);
+  assert.deepEqual(r.issues, []);
+
+  // 下一行已經有時間：當結束標記；寫了結束時間是警告
+  const r2 = parse(`# 歌
+[00:01.00] あ
+[00:02.00-00:03.00] {
+[00:05.00] ハイ}
+`);
+  assert.deepEqual(r2.songs[0].spans, [
+    { start: 1, end: 2, line: 0 },
+    { start: 5, end: 10, line: 1 },
+  ]);
+  assert.deepEqual(levels(r2, 'warning').map((x) => x.line), [3]);
+});
+
+test('front matter call: hidden：() 是一般文字，只有 {} 是 call', () => {
+  const r = parse(`---
+call: Hidden
+---
+# 歌
+あ(ハイ){せーの} (とじない
+`);
+  assert.deepEqual(lyricLines(r.songs[0])[0].segments, [
+    { text: 'あ(ハイ)', call: false, at: null, ruby: null },
+    { text: 'せーの', call: true, at: null, ruby: null },
+    { text: ' (とじない', call: false, at: null, ruby: null },
+  ]);
+  assert.deepEqual(r.issues, []);
+  // visible 等於沒寫；其他值是 warning 並忽略
+  const v = parse('---\ncall: visible\n---\n# 歌\n(ハイ)\n');
+  assert.equal(lyricLines(v.songs[0])[0].segments[0].call, true);
+  const bad = parse('---\ncall: none\n---\n# 歌\n(ハイ)\n');
+  assert.equal(lyricLines(bad.songs[0])[0].segments[0].call, true);
+  assert.deepEqual(levels(bad, 'warning').map((x) => x.line), [2]);
+});
+
 test('標題內的括號不是 call；標題數字的各種分隔；\\ 跳脫數字', () => {
   const heads = ['# 03 うた (ver.2)', '# 4-ハイフン', '# 5.ドット', '# 1999', '# \\7 days'];
   assert.deepEqual(
